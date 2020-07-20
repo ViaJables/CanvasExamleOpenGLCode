@@ -1,0 +1,116 @@
+//
+//  RWTBaseEffect.m
+//  HelloOpenGL
+//
+//  Created by Ray Wenderlich on 9/3/13.
+//  Copyright (c) 2013 Ray Wenderlich. All rights reserved.
+//
+
+#import "AHPathShader.h"
+#import "AHVertex.h"
+
+@implementation AHPathShader
+{
+    GLuint  _programHandle;
+    GLint   _projectionMatrixUniform;
+    GLint   _colorUniform;
+    GLint   _textureUniform;
+    GLint   _pointSizeUniform;
+}
+
+- (GLuint)compileShader:(NSString*)shaderName withType:(GLenum)shaderType {
+    NSString* shaderPath = [[NSBundle mainBundle] pathForResource:shaderName ofType:nil];
+    NSError* error;
+    NSString* shaderString = [NSString stringWithContentsOfFile:shaderPath encoding:NSUTF8StringEncoding error:&error];
+    if (!shaderString) {
+        NSLog(@"Error loading shader: %@", error.localizedDescription);
+        exit(1);
+    }
+    
+    GLuint shaderHandle = glCreateShader(shaderType);
+    
+    const char * shaderStringUTF8 = [shaderString UTF8String];
+    GLint shaderStringLength = (GLint)[shaderString length];
+    glShaderSource(shaderHandle, 1, &shaderStringUTF8, &shaderStringLength);
+    
+    glCompileShader(shaderHandle);
+    
+    GLint compileSuccess;
+    glGetShaderiv(shaderHandle, GL_COMPILE_STATUS, &compileSuccess);
+    if (compileSuccess == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(shaderHandle, sizeof(messages), 0, &messages[0]);
+        NSString *messageString = [NSString stringWithUTF8String:messages];
+        NSLog(@"%@", messageString);
+        
+        exit(1);
+    }
+    
+    return shaderHandle;
+}
+
+- (void)compileVertexShader:(NSString *)vertexShader
+             fragmentShader:(NSString *)fragmentShader
+{
+    GLuint vertexShaderName = [self compileShader:vertexShader
+                                         withType:GL_VERTEX_SHADER];
+    GLuint fragmentShaderName = [self compileShader:fragmentShader
+                                           withType:GL_FRAGMENT_SHADER];
+    
+    _programHandle = glCreateProgram();
+    glAttachShader(_programHandle, vertexShaderName);
+    glAttachShader(_programHandle, fragmentShaderName);
+    
+    glBindAttribLocation(_programHandle, AHVertexAttribPosition, "a_Position");
+    
+    glLinkProgram(_programHandle);
+    
+    glUseProgram(_programHandle);
+    
+    self.projectionMatrix = GLKMatrix4Identity;
+    self.color = GLKVector4Make(0.0, 0.0, 0.0, 1.0);
+    
+    _projectionMatrixUniform = glGetUniformLocation(_programHandle, "u_ProjectionMatrix");
+    _colorUniform = glGetUniformLocation(_programHandle, "u_Color");
+    _textureUniform = glGetUniformLocation(_programHandle, "u_Texture");
+    _pointSizeUniform = glGetUniformLocation(_programHandle, "u_PointSize");
+    
+    GLint linkSuccess;
+    glGetProgramiv(_programHandle, GL_LINK_STATUS, &linkSuccess);
+    
+    if (linkSuccess == GL_FALSE)
+    {
+        GLchar messages[256];
+        glGetProgramInfoLog(_programHandle, sizeof(messages), 0, &messages[0]);
+        NSString *messageString = [NSString stringWithUTF8String:messages];
+        NSLog(@"%@", messageString);
+        exit(1);
+    }
+}
+
+- (void)prepareToDraw
+{
+    glUseProgram(_programHandle);
+    
+    glUniformMatrix4fv(_projectionMatrixUniform, 1, 0, self.projectionMatrix.m);
+    glUniform4fv(_colorUniform, 1, self.color.v);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, self.textureID);
+    
+    glUniform1i(_textureUniform, 0);
+    glUniform1f(_pointSizeUniform, self.strokeWidth);
+}
+
+- (instancetype)initWithVertexShader:(NSString *)vertexShader
+                      fragmentShader:(NSString *)fragmentShader
+{
+    if ((self = [super init]))
+    {
+        [self compileVertexShader:vertexShader fragmentShader:fragmentShader];
+    }
+    
+    return self;
+}
+
+@end
